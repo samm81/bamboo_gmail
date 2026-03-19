@@ -1,4 +1,4 @@
-defmodule Bamboo.GmailAdapter.Errors do
+defmodule Bamboo.GmailAdapter.ErrorsTest do
   use ExUnit.Case
 
   alias Bamboo.GmailAdapter.Errors.{ConfigError, HTTPError, TokenError}
