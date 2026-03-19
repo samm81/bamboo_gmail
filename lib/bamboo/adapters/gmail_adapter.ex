@@ -73,17 +73,17 @@ defmodule Bamboo.GmailAdapter do
     |> Base.url_encode64()
     |> log_to_sandbox(label: "base64url encoded message")
 
-    get_sub(config)
-    |> get_access_token()
-    |> log_to_sandbox(label: "access token")
+    with {:ok, token} <- fetch_access_token(config) do
+      log_to_sandbox(token, label: "access token")
+    end
   end
 
   defp handle_dispatch(email, config) do
     message = build_message(email)
 
-    get_sub(config)
-    |> get_access_token()
-    |> build_request(message)
+    with {:ok, token} <- fetch_access_token(config) do
+      build_request(token, message)
+    end
   end
 
   defp build_message(email) do
@@ -179,23 +179,26 @@ defmodule Bamboo.GmailAdapter do
     handle_error(:conf, "sub")
   end
 
-  defp get_sub(%{sub: sub}) do
-    case sub do
-      {:system, s} -> validate_env_var(s)
-      _ -> sub
+  defp fetch_access_token(config) do
+    with {:ok, sub} <- get_sub(config),
+         {:ok, token} <- get_access_token(sub) do
+      {:ok, token}
     end
   end
 
+  defp get_sub(%{sub: {:system, env_var}}), do: validate_env_var(env_var)
+  defp get_sub(%{sub: sub}), do: {:ok, sub}
+
   defp validate_env_var(env_var) do
-    case var = System.get_env(env_var) do
+    case System.get_env(env_var) do
       nil -> handle_error(:env, "Environment variable '#{env_var}' not found")
-      _ -> var
+      var -> {:ok, var}
     end
   end
 
   defp get_access_token(sub) do
     case Goth.Token.for_scope(@gmail_auth_scope, sub) do
-      {:ok, token} -> Map.get(token, :token)
+      {:ok, token} -> {:ok, Map.get(token, :token)}
       {:error, error} -> handle_error(:auth, error)
     end
   end
@@ -205,7 +208,7 @@ defmodule Bamboo.GmailAdapter do
       :auth -> {:error, TokenError.build_error(message: error)}
       :http -> {:error, HTTPError.build_error(message: error)}
       :conf -> {:error, ConfigError.build_error(field: error)}
-      :env -> {:error, ArgumentError.build_error(message: error)}
+      :env -> {:error, ArgumentError.exception(error)}
     end
   end
 
