@@ -160,7 +160,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     ["#{key}=#{value}" | render_subtypes(subtypes)]
   end
 
-  defp encode_header_value(header_value, :quoted_printable) do
+  defp encode_header_value(header_value, :quoted_printable) when is_binary(header_value) do
     if requires_encoding?(header_value) do
       header_value
       |> encode_quoted_printable_header(@encoded_word_max_length)
@@ -168,6 +168,10 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     else
       header_value
     end
+  end
+
+  defp encode_header_value(header_value, _encoding) do
+    to_string(header_value)
   end
 
   defp requires_encoding?(<<>>), do: false
