@@ -3,6 +3,8 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
 
   @days ~w(Mon Tue Wed Thu Fri Sat Sun)
   @months ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
+  @encoded_word_max_length 64
+  @reserved_header_chars [?=, ??, ?_]
 
   @moduledoc """
   RFC2822 Parser:  Adapted from [elixir-mail](https://github.com/DockYard/elixir-mail)
@@ -117,7 +119,11 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   end
 
   defp render_header_value(_key, [value | subtypes]),
-    do: Enum.join([value | render_subtypes(subtypes)], "; ")
+    do:
+      Enum.join(
+        [encode_header_value(value, :quoted_printable) | render_subtypes(subtypes)],
+        "; "
+      )
 
   defp render_header_value(key, value),
     do: render_header_value(key, List.wrap(value))
@@ -135,7 +141,10 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     end
   end
 
-  defp render_address({name, email}), do: ~s("#{name}" <#{validate_address(email)}>)
+  defp render_address({name, email}) do
+    "#{encode_header_value(~s("#{name}"), :quoted_printable)} <#{validate_address(email)}>"
+  end
+
   defp render_address(email), do: validate_address(email)
   defp render_subtypes([]), do: []
 
@@ -149,6 +158,91 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp render_subtypes([{key, value} | subtypes]) do
     key = String.replace(key, "_", "-")
     ["#{key}=#{value}" | render_subtypes(subtypes)]
+  end
+
+  defp encode_header_value(header_value, :quoted_printable) do
+    if requires_encoding?(header_value) do
+      header_value
+      |> encode_quoted_printable_header(@encoded_word_max_length)
+      |> wrap_encoded_words()
+    else
+      header_value
+    end
+  end
+
+  defp requires_encoding?(<<>>), do: false
+  defp requires_encoding?(<<byte, _rest::binary>>) when byte > 126, do: true
+  defp requires_encoding?(<<byte, _rest::binary>>) when byte < 32 and byte != ?\t, do: true
+  defp requires_encoding?(<<_byte, rest::binary>>), do: requires_encoding?(rest)
+
+  defp wrap_encoded_words(value) do
+    :binary.split(value, "=\r\n", [:global])
+    |> Enum.map(fn chunk -> <<"=?UTF-8?Q?", chunk::binary, "?=">> end)
+    |> Enum.join()
+  end
+
+  defp encode_quoted_printable_header(string, max_length, acc \\ <<>>, line_length \\ 0)
+
+  defp encode_quoted_printable_header(<<>>, _max_length, acc, _line_length), do: acc
+
+  defp encode_quoted_printable_header(
+         <<char, tail::binary>>,
+         max_length,
+         acc,
+         line_length
+       )
+       when char in ?!..?~ and char not in @reserved_header_chars do
+    if line_length < max_length - 1 do
+      encode_quoted_printable_header(tail, max_length, acc <> <<char>>, line_length + 1)
+    else
+      encode_quoted_printable_header(tail, max_length, acc <> "=\r\n" <> <<char>>, 1)
+    end
+  end
+
+  defp encode_quoted_printable_header(
+         <<char, tail::binary>>,
+         max_length,
+         acc,
+         line_length
+       )
+       when char in [?\t, ?\s] do
+    if byte_size(tail) > 0 do
+      if line_length < max_length - 1 do
+        encode_quoted_printable_header(tail, max_length, acc <> <<char>>, line_length + 1)
+      else
+        encode_quoted_printable_header(tail, max_length, acc <> "=\r\n" <> <<char>>, 1)
+      end
+    else
+      escaped = "=" <> Base.encode16(<<char>>)
+      line_length = line_length + byte_size(escaped)
+
+      if line_length <= max_length do
+        encode_quoted_printable_header(tail, max_length, acc <> escaped, line_length)
+      else
+        encode_quoted_printable_header(
+          tail,
+          max_length,
+          acc <> "=\r\n" <> escaped,
+          byte_size(escaped)
+        )
+      end
+    end
+  end
+
+  defp encode_quoted_printable_header(<<char, tail::binary>>, max_length, acc, line_length) do
+    escaped = "=" <> Base.encode16(<<char>>)
+    line_length = line_length + byte_size(escaped)
+
+    if line_length < max_length do
+      encode_quoted_printable_header(tail, max_length, acc <> escaped, line_length)
+    else
+      encode_quoted_printable_header(
+        tail,
+        max_length,
+        acc <> "=\r\n" <> escaped,
+        byte_size(escaped)
+      )
+    end
   end
 
   @doc """
