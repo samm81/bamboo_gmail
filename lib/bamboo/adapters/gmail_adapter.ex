@@ -99,21 +99,18 @@ defmodule Bamboo.GmailAdapter do
   end
 
   defp put_to(message, %{to: recipients}) do
-    recipients = Enum.map(recipients, fn {_, email} -> email end)
     Mail.put_to(message, recipients)
   end
 
   defp put_cc(message, %{cc: recipients}) do
-    recipients = Enum.map(recipients, fn {_, email} -> email end)
     Mail.put_cc(message, recipients)
   end
 
   defp put_bcc(message, %{bcc: recipients}) do
-    recipients = Enum.map(recipients, fn {_, email} -> email end)
     Mail.put_bcc(message, recipients)
   end
 
-  defp put_from(message, %{from: {_, sender}}) do
+  defp put_from(message, %{from: sender}) do
     Mail.put_from(message, sender)
   end
 
