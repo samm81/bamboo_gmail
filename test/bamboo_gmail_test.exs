@@ -65,6 +65,31 @@ defmodule Bamboo.GmailAdapterTest do
     assert output =~ "Bcc: =?UTF-8?Q?"
   end
 
+  test "sandbox rendering adds utf-8 charset for non-ascii text bodies" do
+    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
+    original_value = System.get_env(env_var)
+
+    System.delete_env(env_var)
+
+    on_exit(fn ->
+      case original_value do
+        nil -> System.delete_env(env_var)
+        value -> System.put_env(env_var, value)
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert {:error, %ArgumentError{}} =
+                 GmailAdapter.deliver(unicode_body_email(), %{
+                   sub: {:system, env_var},
+                   sandbox: true
+                 })
+      end)
+
+    assert output =~ "Content-Type: text/plain; charset=UTF-8"
+  end
+
   defp email do
     Email.new_email(
       to: [{"Recipient", "to@example.com"}],
@@ -84,6 +109,17 @@ defmodule Bamboo.GmailAdapterTest do
       from: {"José Sender", "from@example.com"},
       subject: "subject",
       text_body: "body"
+    )
+  end
+
+  defp unicode_body_email do
+    Email.new_email(
+      to: [{"Recipient", "to@example.com"}],
+      cc: [],
+      bcc: [],
+      from: {"Sender", "from@example.com"},
+      subject: "subject",
+      text_body: "café body"
     )
   end
 end

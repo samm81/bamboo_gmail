@@ -71,6 +71,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   end
 
   def render_part(%Mail.Message{} = message, _fun) do
+    message = maybe_put_utf8_charset(message)
     encoded_body = encode(message.body, message)
     "#{render_headers(message.headers)}\r\n\r\n#{encoded_body}"
   end
@@ -336,4 +337,39 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp encode(body, message) do
     Mail.Encoder.encode(body, Mail.Message.get_header(message, "content-transfer-encoding"))
   end
+
+  defp maybe_put_utf8_charset(%Mail.Message{} = message) do
+    if needs_utf8_charset?(message) do
+      content_type =
+        message
+        |> Mail.Message.get_content_type()
+        |> Mail.Proplist.put("charset", "UTF-8")
+
+      Mail.Message.put_content_type(message, content_type)
+    else
+      message
+    end
+  end
+
+  defp needs_utf8_charset?(%Mail.Message{body: body} = message) when is_binary(body) do
+    text_part?(message) and has_non_ascii_byte?(body) and
+      not content_type_has_param?(message, "charset")
+  end
+
+  defp needs_utf8_charset?(_message), do: false
+
+  defp text_part?(message), do: match_content_type?(message, ~r/text\/(plain|html)/)
+
+  defp content_type_has_param?(message, param) do
+    message
+    |> Mail.Message.get_content_type()
+    |> Enum.any?(fn
+      {key, _value} -> to_string(key) == param
+      _value -> false
+    end)
+  end
+
+  defp has_non_ascii_byte?(<<>>), do: false
+  defp has_non_ascii_byte?(<<byte, _rest::binary>>) when byte > 127, do: true
+  defp has_non_ascii_byte?(<<_byte, rest::binary>>), do: has_non_ascii_byte?(rest)
 end

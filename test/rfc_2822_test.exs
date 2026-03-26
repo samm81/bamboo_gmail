@@ -50,6 +50,42 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header =~ "<jose@example.com>"
   end
 
+  test "adds utf-8 charset to non-ascii text bodies" do
+    rendered =
+      %Mail.Message{}
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> Mail.put_text("café body")
+      |> RFC2822.render()
+
+    assert header_line(rendered, "Content-Type") == "Content-Type: text/plain; charset=UTF-8"
+  end
+
+  test "adds utf-8 charset to non-ascii html bodies" do
+    rendered =
+      %Mail.Message{}
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> Mail.put_html("<p>café body</p>")
+      |> RFC2822.render()
+
+    assert header_line(rendered, "Content-Type") == "Content-Type: text/html; charset=UTF-8"
+  end
+
+  test "keeps ascii text bodies without a charset parameter" do
+    rendered =
+      %Mail.Message{}
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> Mail.put_text("plain body")
+      |> RFC2822.render()
+
+    assert header_line(rendered, "Content-Type") == "Content-Type: text/plain"
+  end
+
   defp header_line(rendered, header_name) do
     rendered
     |> String.split("\r\n\r\n", parts: 2)
