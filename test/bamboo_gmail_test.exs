@@ -90,6 +90,34 @@ defmodule Bamboo.GmailAdapterTest do
     assert output =~ "Content-Type: text/plain; charset=UTF-8"
   end
 
+  test "sandbox rendering encodes non-ascii attachment filenames with rfc2231" do
+    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
+    original_value = System.get_env(env_var)
+
+    System.delete_env(env_var)
+
+    on_exit(fn ->
+      case original_value do
+        nil -> System.delete_env(env_var)
+        value -> System.put_env(env_var, value)
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert {:error, %ArgumentError{}} =
+                 GmailAdapter.deliver(attachment_email(), %{
+                   sub: {:system, env_var},
+                   sandbox: true
+                 })
+      end)
+
+    assert output =~
+             ~s|Content-Disposition: attachment; filename*=UTF-8''r%C3%A9sum%C3%A9%20final.pdf|
+
+    refute output =~ "filename=résumé final.pdf"
+  end
+
   defp email do
     Email.new_email(
       to: [{"Recipient", "to@example.com"}],
@@ -121,5 +149,17 @@ defmodule Bamboo.GmailAdapterTest do
       subject: "subject",
       text_body: "café body"
     )
+  end
+
+  defp attachment_email do
+    Email.new_email(
+      to: [{"Recipient", "to@example.com"}],
+      cc: [],
+      bcc: [],
+      from: {"Sender", "from@example.com"},
+      subject: "subject",
+      text_body: "body"
+    )
+    |> Email.put_attachment(%Bamboo.Attachment{filename: "résumé final.pdf", data: "data"})
   end
 end

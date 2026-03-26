@@ -153,13 +153,88 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     do: render_subtypes([{Atom.to_string(key), value} | subtypes])
 
   defp render_subtypes([{"boundary", value} | subtypes]) do
-    [~s(boundary="#{value}") | render_subtypes(subtypes)]
+    [~s(boundary=#{quote_parameter_value(value)}) | render_subtypes(subtypes)]
   end
 
   defp render_subtypes([{key, value} | subtypes]) do
     key = String.replace(key, "_", "-")
-    ["#{key}=#{value}" | render_subtypes(subtypes)]
+
+    [render_subtype(key, value) | render_subtypes(subtypes)]
   end
+
+  defp render_subtype(key, value) do
+    case encode_parameter_value(value) do
+      {:regular, encoded_value} -> "#{key}=#{encoded_value}"
+      {:extended, encoded_value} -> "#{key}*=#{encoded_value}"
+    end
+  end
+
+  defp encode_parameter_value(value) do
+    value = to_string(value)
+
+    cond do
+      parameter_token_safe?(value) ->
+        {:regular, value}
+
+      requires_extended_parameter_encoding?(value) ->
+        {:extended, "UTF-8''" <> encode_extended_parameter_value(value)}
+
+      true ->
+        {:regular, quote_parameter_value(value)}
+    end
+  end
+
+  defp parameter_token_safe?(<<>>), do: false
+
+  defp parameter_token_safe?(<<byte>>) when byte <= 32 or byte >= 127,
+    do: false
+
+  defp parameter_token_safe?(<<byte>>)
+       when byte in [?(, ?), ?<, ?>, ?@, ?,, ?;, ?:, ?\\, ?", ?/, ?[, ?], ??, ?=],
+       do: false
+
+  defp parameter_token_safe?(<<_byte>>), do: true
+
+  defp parameter_token_safe?(<<byte, _rest::binary>>) when byte <= 32 or byte >= 127,
+    do: false
+
+  defp parameter_token_safe?(<<byte, _rest::binary>>)
+       when byte in [?(, ?), ?<, ?>, ?@, ?,, ?;, ?:, ?\\, ?", ?/, ?[, ?], ??, ?=],
+       do: false
+
+  defp parameter_token_safe?(<<_byte, rest::binary>>), do: parameter_token_safe?(rest)
+
+  defp requires_extended_parameter_encoding?(<<>>), do: false
+  defp requires_extended_parameter_encoding?(<<byte, _rest::binary>>) when byte < 32, do: true
+  defp requires_extended_parameter_encoding?(<<127, _rest::binary>>), do: true
+  defp requires_extended_parameter_encoding?(<<byte, _rest::binary>>) when byte > 127, do: true
+
+  defp requires_extended_parameter_encoding?(<<_byte, rest::binary>>),
+    do: requires_extended_parameter_encoding?(rest)
+
+  defp quote_parameter_value(value) do
+    escaped_value =
+      value
+      |> to_string()
+      |> String.replace("\\", "\\\\")
+      |> String.replace("\"", "\\\"")
+
+    ~s("#{escaped_value}")
+  end
+
+  defp encode_extended_parameter_value(value) do
+    URI.encode(value, &extended_parameter_char?/1)
+  end
+
+  defp extended_parameter_char?(char)
+       when char in ?0..?9 or char in ?A..?Z or char in ?a..?z,
+       do: true
+
+  defp extended_parameter_char?(char)
+       when char in [?!, ?#, ?$, ?&, ?+, ?-, ?., ?^, ?_, ?`, ?|, ?~],
+       do: true
+
+  defp extended_parameter_char?(_char), do: false
 
   defp encode_header_value(header_value, :quoted_printable) when is_binary(header_value) do
     if requires_encoding?(header_value) do

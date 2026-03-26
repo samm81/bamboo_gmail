@@ -50,6 +50,30 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header =~ "<jose@example.com>"
   end
 
+  test "quotes ascii attachment filenames with special characters" do
+    header =
+      RFC2822.render_header("content-disposition", [
+        "attachment",
+        {"filename", "quarterly report (final).pdf"}
+      ])
+
+    assert header ==
+             ~s|Content-Disposition: attachment; filename="quarterly report (final).pdf"|
+  end
+
+  test "encodes non-ascii attachment filenames with rfc2231 parameters" do
+    rendered =
+      Mail.Message.build_attachment({"résumé final.pdf", "data"})
+      |> RFC2822.render_part()
+
+    header = header_line(rendered, "Content-Disposition")
+
+    assert header ==
+             ~s|Content-Disposition: attachment; filename*=UTF-8''r%C3%A9sum%C3%A9%20final.pdf|
+
+    refute header =~ "résumé final.pdf"
+  end
+
   test "adds utf-8 charset to non-ascii text bodies" do
     rendered =
       %Mail.Message{}
