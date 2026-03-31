@@ -100,6 +100,31 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     refute header =~ "résumé final.pdf"
   end
 
+  test "keeps text attachments outside multipart alternative body section" do
+    rendered =
+      Mail.build_multipart()
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> Mail.put_text("body")
+      |> Mail.put_attachment({"notes.txt", "attachment body"})
+      |> RFC2822.render()
+
+    outer_boundary = boundary_for(rendered, "multipart/mixed")
+
+    [_, alternative_part, attachment_part] =
+      String.split(rendered, "--#{outer_boundary}\r\n", parts: 3)
+
+    refute alternative_part =~ "Content-Disposition: attachment; filename=notes.txt"
+
+    attachment_headers =
+      attachment_part
+      |> String.split("\r\n\r\n", parts: 2)
+      |> hd()
+
+    assert attachment_headers =~ "Content-Disposition: attachment; filename=notes.txt"
+  end
+
   test "adds utf-8 charset to non-ascii text bodies" do
     rendered =
       %Mail.Message{}
@@ -142,5 +167,11 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     |> hd()
     |> String.split("\r\n")
     |> Enum.find(&String.starts_with?(&1, "#{header_name}: "))
+  end
+
+  defp boundary_for(rendered, content_type) do
+    regex = ~r/Content-Type: #{Regex.escape(content_type)}; boundary="([^"]+)"/
+    [_, boundary] = Regex.run(regex, rendered)
+    boundary
   end
 end

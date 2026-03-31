@@ -396,7 +396,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
 
     if Mail.Message.has_attachment?(message) do
       text_parts =
-        Enum.filter(message.parts, &match_content_type?(&1, ~r/text\/(plain|html)/))
+        Enum.filter(message.parts, &alternative_body_part?/1)
         |> Enum.sort(&(&1 > &2))
 
       content_type = List.replace_at(content_type, 0, "multipart/mixed")
@@ -422,6 +422,10 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
 
   defp encode(body, message) do
     Mail.Encoder.encode(body, Mail.Message.get_header(message, "content-transfer-encoding"))
+  end
+
+  defp alternative_body_part?(part) do
+    match_content_type?(part, ~r/text\/(plain|html)/) and not Mail.Message.is_attachment?(part)
   end
 
   defp maybe_put_utf8_charset(%Mail.Message{} = message) do
