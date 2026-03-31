@@ -90,6 +90,32 @@ defmodule Bamboo.GmailAdapterTest do
     assert output =~ "Content-Type: text/plain; charset=UTF-8"
   end
 
+  test "sandbox delivery skips omitted cc and bcc lists" do
+    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
+    original_value = System.get_env(env_var)
+
+    System.delete_env(env_var)
+
+    on_exit(fn ->
+      case original_value do
+        nil -> System.delete_env(env_var)
+        value -> System.put_env(env_var, value)
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert {:error, %ArgumentError{} = error} =
+                 GmailAdapter.deliver(default_email(), %{sub: {:system, env_var}, sandbox: true})
+
+        assert error.message == "Environment variable '#{env_var}' not found"
+      end)
+
+    refute output =~ "Cc:"
+    refute output =~ "Bcc:"
+    assert output =~ "to@example.com"
+  end
+
   test "sandbox rendering encodes non-ascii attachment filenames with rfc2231" do
     env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
     original_value = System.get_env(env_var)
@@ -123,6 +149,15 @@ defmodule Bamboo.GmailAdapterTest do
       to: [{"Recipient", "to@example.com"}],
       cc: [],
       bcc: [],
+      from: {"Sender", "from@example.com"},
+      subject: "subject",
+      text_body: "body"
+    )
+  end
+
+  defp default_email do
+    Email.new_email(
+      to: [{"Recipient", "to@example.com"}],
       from: {"Sender", "from@example.com"},
       subject: "subject",
       text_body: "body"

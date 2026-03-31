@@ -102,9 +102,13 @@ defmodule Bamboo.GmailAdapter do
     Mail.put_to(message, recipients)
   end
 
+  defp put_cc(message, %{cc: nil}), do: message
+
   defp put_cc(message, %{cc: recipients}) do
     Mail.put_cc(message, recipients)
   end
+
+  defp put_bcc(message, %{bcc: nil}), do: message
 
   defp put_bcc(message, %{bcc: recipients}) do
     Mail.put_bcc(message, recipients)
