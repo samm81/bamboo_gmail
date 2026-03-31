@@ -4,6 +4,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   @days ~w(Mon Tue Wed Thu Fri Sat Sun)
   @months ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
   @encoded_word_max_length 64
+  @header_line_max_length 78
   @reserved_header_chars [?=, ??, ?_]
 
   @moduledoc """
@@ -90,7 +91,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
       |> Enum.map(&String.capitalize(&1))
       |> Enum.join("-")
 
-    key <> ": " <> render_header_value(key, value)
+    render_header_line(key, render_header_value(key, value))
   end
 
   defp render_header_value("Date", date_time),
@@ -278,7 +279,50 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp wrap_encoded_words(value) do
     :binary.split(value, "=\r\n", [:global])
     |> Enum.map(fn chunk -> <<"=?UTF-8?Q?", chunk::binary, "?=">> end)
-    |> Enum.join()
+    |> Enum.join(" ")
+  end
+
+  defp render_header_line(key, value) do
+    if fold_encoded_header?(key, value) do
+      fold_header_line(key, value)
+    else
+      "#{key}: #{value}"
+    end
+  end
+
+  defp fold_encoded_header?(key, value) do
+    String.contains?(value, "=?") and
+      byte_size(key) + 2 + byte_size(value) > @header_line_max_length
+  end
+
+  defp fold_header_line(key, value) do
+    {lines, current_line, _current_length} =
+      value
+      |> header_segments()
+      |> Enum.reduce({["#{key}:"], "#{key}:", byte_size("#{key}:")}, fn {separator, token},
+                                                                        {lines, current_line,
+                                                                         current_length} ->
+        segment_length = byte_size(separator) + byte_size(token)
+
+        if current_length + segment_length <= @header_line_max_length do
+          current_line = current_line <> separator <> token
+
+          {List.replace_at(lines, -1, current_line), current_line,
+           current_length + segment_length}
+        else
+          next_line = separator <> token
+          {lines ++ [next_line], next_line, byte_size(next_line)}
+        end
+      end)
+
+    lines
+    |> List.replace_at(-1, current_line)
+    |> Enum.join("\r\n")
+  end
+
+  defp header_segments(value) do
+    Regex.scan(~r/(\s+)(\S+)/u, " " <> value, capture: :all_but_first)
+    |> Enum.map(fn [separator, token] -> {separator, token} end)
   end
 
   defp encode_quoted_printable_header(string, max_length, acc \\ <<>>, line_length \\ 0)

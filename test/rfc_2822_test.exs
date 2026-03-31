@@ -19,12 +19,22 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
       |> Mail.put_text("body")
       |> RFC2822.render()
 
-    subject_line = header_line(rendered, "Subject")
+    subject_line = header_entry(rendered, "Subject")
 
     assert subject_line == RFC2822.render_header("subject", @unicode_subject)
     assert subject_line =~ "=?UTF-8?Q?"
     assert subject_line =~ "=E2=80=93"
     refute subject_line =~ @unicode_subject
+  end
+
+  test "folds long encoded subject headers onto continuation lines" do
+    header = RFC2822.render_header("subject", @unicode_subject)
+    lines = String.split(header, "\r\n")
+
+    assert length(lines) > 1
+    assert Enum.drop(lines, 1) |> Enum.all?(&String.starts_with?(&1, " "))
+    assert Enum.all?(lines, &(byte_size(&1) <= 78))
+    assert String.replace(header, "\r\n", "") =~ "?= =?UTF-8?Q?"
   end
 
   test "ascii subject headers remain plain" do
@@ -168,11 +178,36 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
   end
 
   defp header_line(rendered, header_name) do
+    case header_entry(rendered, header_name) do
+      nil -> nil
+      header -> header |> String.split("\r\n") |> hd()
+    end
+  end
+
+  defp header_entry(rendered, header_name) do
     rendered
     |> String.split("\r\n\r\n", parts: 2)
     |> hd()
     |> String.split("\r\n")
-    |> Enum.find(&String.starts_with?(&1, "#{header_name}: "))
+    |> Enum.reduce_while([], fn line, acc ->
+      cond do
+        acc == [] and String.starts_with?(line, "#{header_name}:") ->
+          {:cont, [line]}
+
+        acc != [] and String.starts_with?(line, [" ", "\t"]) ->
+          {:cont, [line | acc]}
+
+        acc != [] ->
+          {:halt, acc}
+
+        true ->
+          {:cont, acc}
+      end
+    end)
+    |> case do
+      [] -> nil
+      lines -> lines |> Enum.reverse() |> Enum.join("\r\n")
+    end
   end
 
   defp boundary_for(rendered, content_type) do
