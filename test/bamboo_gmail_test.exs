@@ -144,6 +144,33 @@ defmodule Bamboo.GmailAdapterTest do
     refute output =~ "filename=résumé final.pdf"
   end
 
+  test "sandbox rendering preserves attachment content type and content id" do
+    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
+    original_value = System.get_env(env_var)
+
+    System.delete_env(env_var)
+
+    on_exit(fn ->
+      case original_value do
+        nil -> System.delete_env(env_var)
+        value -> System.put_env(env_var, value)
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert {:error, %ArgumentError{}} =
+                 GmailAdapter.deliver(inline_attachment_email(), %{
+                   sub: {:system, env_var},
+                   sandbox: true
+                 })
+      end)
+
+    assert output =~ "Content-Type: image/webp"
+    assert output =~ "Content-Id: logo-123"
+    refute output =~ "Content-Type: application/octet-stream"
+  end
+
   defp email do
     Email.new_email(
       to: [{"Recipient", "to@example.com"}],
@@ -196,5 +223,22 @@ defmodule Bamboo.GmailAdapterTest do
       text_body: "body"
     )
     |> Email.put_attachment(%Bamboo.Attachment{filename: "résumé final.pdf", data: "data"})
+  end
+
+  defp inline_attachment_email do
+    Email.new_email(
+      to: [{"Recipient", "to@example.com"}],
+      cc: [],
+      bcc: [],
+      from: {"Sender", "from@example.com"},
+      subject: "subject",
+      html_body: ~s(<img src="cid:logo-123" alt="logo" />)
+    )
+    |> Email.put_attachment(%Bamboo.Attachment{
+      filename: "logo.png",
+      data: "data",
+      content_type: "image/webp",
+      content_id: "logo-123"
+    })
   end
 end

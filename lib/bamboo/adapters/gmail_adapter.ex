@@ -143,10 +143,14 @@ defmodule Bamboo.GmailAdapter do
     |> put_attachments_helper(tail)
   end
 
-  defp put_attachments_helper(message, %Bamboo.Attachment{filename: filename, data: data}) do
+  defp put_attachments_helper(message, %Bamboo.Attachment{} = attachment) do
+    %{filename: filename, data: data, content_type: content_type, content_id: content_id} =
+      attachment
+
     attachment =
       Mail.Message.build_attachment({filename, data})
-      |> Mail.Message.put_header(:content_type, "application/octet-stream")
+      |> maybe_put_attachment_content_type(content_type)
+      |> maybe_put_attachment_content_id(content_id)
       |> Mail.Message.put_header(:content_length, byte_size(data))
 
     Mail.Message.put_part(message, attachment)
@@ -154,6 +158,18 @@ defmodule Bamboo.GmailAdapter do
 
   defp put_attachments_helper(message, _no_attachments) do
     message
+  end
+
+  defp maybe_put_attachment_content_type(message, nil), do: message
+
+  defp maybe_put_attachment_content_type(message, content_type) do
+    Mail.Message.put_header(message, :content_type, content_type)
+  end
+
+  defp maybe_put_attachment_content_id(message, nil), do: message
+
+  defp maybe_put_attachment_content_id(message, content_id) do
+    Mail.Message.put_header(message, :content_id, content_id)
   end
 
   defp build_request(token, message) do
