@@ -125,7 +125,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     do: render_header_value(key, List.wrap(value))
 
   defp validate_address(address) do
-    case Regex.match?(@email_validation_regex, address) do
+    case valid_address?(address) do
       true ->
         address
 
@@ -134,6 +134,21 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
           message: """
           The email address `#{address}` is invalid.
           """
+    end
+  end
+
+  defp valid_address?(address) do
+    not contains_control_char?(address) and matches_entire_address?(address)
+  end
+
+  defp contains_control_char?(<<>>), do: false
+  defp contains_control_char?(<<byte, _rest::binary>>) when byte < 32 or byte == 127, do: true
+  defp contains_control_char?(<<_byte, rest::binary>>), do: contains_control_char?(rest)
+
+  defp matches_entire_address?(address) do
+    case Regex.run(@email_validation_regex, address) do
+      [match | _captures] when match == address -> true
+      _ -> false
     end
   end
 

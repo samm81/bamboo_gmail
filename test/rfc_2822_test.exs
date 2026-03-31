@@ -50,6 +50,18 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header =~ "<jose@example.com>"
   end
 
+  test "rejects header injection in bare address headers" do
+    assert_raise ArgumentError, ~r/is invalid/, fn ->
+      RFC2822.render_header("to", "victim@example.com\r\nBcc: injected@example.com")
+    end
+  end
+
+  test "rejects header injection in named address headers" do
+    assert_raise ArgumentError, ~r/is invalid/, fn ->
+      RFC2822.render_header("to", {"Victim", "victim@example.com\r\nBcc: injected@example.com"})
+    end
+  end
+
   test "render omits bcc headers from the final message" do
     rendered =
       %Mail.Message{}
