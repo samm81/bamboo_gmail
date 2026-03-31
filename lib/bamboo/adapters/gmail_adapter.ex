@@ -58,7 +58,10 @@ defmodule Bamboo.GmailAdapter do
   end
 
   def handle_config(config) do
-    validate_config_fields(config)
+    case validate_config_fields(config) do
+      {:error, %ConfigError{} = error} -> raise error
+      valid_config -> valid_config
+    end
   end
 
   def supports_attachments?, do: true

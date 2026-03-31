@@ -2,6 +2,10 @@ defmodule Bamboo.GmailAdapterTest.SandboxMailer do
   use Bamboo.Mailer, otp_app: :bamboo_gmail
 end
 
+defmodule Bamboo.GmailAdapterTest.InvalidConfigMailer do
+  use Bamboo.Mailer, otp_app: :bamboo_gmail
+end
+
 defmodule Bamboo.GmailAdapterTest do
   use ExUnit.Case
   import ExUnit.CaptureIO
@@ -9,17 +13,25 @@ defmodule Bamboo.GmailAdapterTest do
   alias Bamboo.Email
   alias Bamboo.GmailAdapter
   alias Bamboo.GmailAdapter.Errors.{ConfigError, HTTPError}
-  alias Bamboo.GmailAdapterTest.SandboxMailer
+  alias Bamboo.GmailAdapterTest.{InvalidConfigMailer, SandboxMailer}
 
   doctest Bamboo.GmailAdapter
 
-  @invalid_config %{
-    app: :mailer,
-    adapter: :adapter
-  }
+  test "missing sub raises ConfigError through the Bamboo mailer config path" do
+    original_config = Application.get_env(:bamboo_gmail, InvalidConfigMailer)
 
-  test "invalid configuration raises ConfigError" do
-    assert {:error, %ConfigError{}} = GmailAdapter.handle_config(@invalid_config)
+    Application.put_env(:bamboo_gmail, InvalidConfigMailer, adapter: GmailAdapter)
+
+    on_exit(fn ->
+      case original_config do
+        nil -> Application.delete_env(:bamboo_gmail, InvalidConfigMailer)
+        value -> Application.put_env(:bamboo_gmail, InvalidConfigMailer, value)
+      end
+    end)
+
+    assert_raise ConfigError, ~r/Must provide `sub` field in config/, fn ->
+      InvalidConfigMailer.deliver_now(default_email())
+    end
   end
 
   test "missing env-backed sub returns an ArgumentError tuple" do
