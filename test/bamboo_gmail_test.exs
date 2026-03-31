@@ -145,6 +145,23 @@ defmodule Bamboo.GmailAdapterTest do
     refute output =~ "Bcc:"
   end
 
+  test "sandbox rendering forwards custom bamboo headers into the mime message" do
+    capture_io(fn ->
+      test_pid = self()
+
+      assert {:ok, encoded_message} = GmailAdapter.deliver(header_email(), %{sandbox: true})
+
+      send(test_pid, {:encoded_message, encoded_message})
+    end)
+
+    assert_receive {:encoded_message, encoded_message}
+
+    rendered_message = Base.url_decode64!(encoded_message)
+
+    assert rendered_message =~ ~s(Reply-To: "Reply Sender" <reply@example.com>)
+    assert rendered_message =~ "X-Trace-Id: trace-123"
+  end
+
   test "sandbox rendering adds utf-8 charset for non-ascii text bodies" do
     output =
       capture_io(fn ->
@@ -238,6 +255,12 @@ defmodule Bamboo.GmailAdapterTest do
       subject: "subject",
       text_body: "café body"
     )
+  end
+
+  defp header_email do
+    default_email()
+    |> Email.put_header("Reply-To", {"Reply Sender", "reply@example.com"})
+    |> Email.put_header("X-Trace-Id", "trace-123")
   end
 
   defp attachment_email do

@@ -95,6 +95,7 @@ defmodule Bamboo.GmailAdapter do
     |> put_bcc(email)
     |> put_from(email)
     |> put_subject(email)
+    |> put_headers(email)
     |> put_text_body(email)
     |> put_html_body(email)
     |> put_attachments(email)
@@ -123,6 +124,14 @@ defmodule Bamboo.GmailAdapter do
   defp put_subject(message, %{subject: subject}) do
     Mail.put_subject(message, subject)
   end
+
+  defp put_headers(message, %{headers: headers}) when is_map(headers) do
+    Enum.reduce(headers, message, fn {key, value}, acc ->
+      Mail.Message.put_header(acc, key, value)
+    end)
+  end
+
+  defp put_headers(message, _email), do: message
 
   defp put_html_body(message, %{html_body: nil}), do: message
 
