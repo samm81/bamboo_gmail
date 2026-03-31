@@ -4,7 +4,7 @@ defmodule Bamboo.GmailAdapterTest do
 
   alias Bamboo.Email
   alias Bamboo.GmailAdapter
-  alias Bamboo.GmailAdapter.Errors.{ConfigError}
+  alias Bamboo.GmailAdapter.Errors.{ConfigError, HTTPError}
 
   doctest Bamboo.GmailAdapter
 
@@ -34,6 +34,31 @@ defmodule Bamboo.GmailAdapterTest do
              GmailAdapter.deliver(email(), %{sub: {:system, env_var}})
 
     assert error.message == "Environment variable '#{env_var}' not found"
+  end
+
+  test "gmail api rejections return HTTPError tuples" do
+    response = %HTTPoison.Response{status_code: 401, body: ~s({"error":"invalid_grant"})}
+
+    assert {:error, %HTTPError{} = error} =
+             GmailAdapter.deliver(email(), %{
+               sub: "sub@example.com",
+               token_fetcher: fn "sub@example.com" -> {:ok, "test-token"} end,
+               request_sender: fn url, body, headers ->
+                 assert url == "https://www.googleapis.com/gmail/v1/users/me/messages/send"
+                 assert body =~ ~s("raw": ")
+
+                 assert headers == [
+                          Authorization: "Bearer test-token",
+                          "Content-Type": "application/json"
+                        ]
+
+                 {:ok, response}
+               end
+             })
+
+    assert error.message =~ "Error making HTTP request"
+    assert error.message =~ "status_code: 401"
+    assert error.message =~ "invalid_grant"
   end
 
   test "sandbox delivery stays local and skips access token lookup" do

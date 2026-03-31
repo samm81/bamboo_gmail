@@ -81,7 +81,7 @@ defmodule Bamboo.GmailAdapter do
     message = build_message(email)
 
     with {:ok, token} <- fetch_access_token(config) do
-      build_request(token, message)
+      build_request(token, message, config)
     end
   end
 
@@ -171,20 +171,31 @@ defmodule Bamboo.GmailAdapter do
     Mail.Message.put_header(message, :content_id, content_id)
   end
 
-  defp build_request(token, message) do
+  defp build_request(token, message, config) do
     header = build_request_header(token)
 
     render(message)
     |> Base.url_encode64()
     |> build_request_body()
-    |> send_request(header, @gmail_send_url)
+    |> send_request(header, @gmail_send_url, config)
   end
 
-  defp send_request(body, header, url) do
-    case HTTPoison.post(url, body, header) do
-      {:ok, response} -> {:ok, response}
-      {:error, error} -> handle_error(:http, error)
-    end
+  defp send_request(body, header, url, config) do
+    request_sender(config).(url, body, header)
+    |> handle_response()
+  end
+
+  defp handle_response({:ok, %HTTPoison.Response{status_code: status_code} = response})
+       when status_code >= 200 and status_code < 300 do
+    {:ok, response}
+  end
+
+  defp handle_response({:ok, %HTTPoison.Response{} = response}) do
+    handle_error(:http, response)
+  end
+
+  defp handle_response({:error, error}) do
+    handle_error(:http, error)
   end
 
   # Right now `sub` is the only required field.
@@ -197,7 +208,7 @@ defmodule Bamboo.GmailAdapter do
 
   defp fetch_access_token(config) do
     with {:ok, sub} <- get_sub(config),
-         {:ok, token} <- get_access_token(sub) do
+         {:ok, token} <- get_access_token(sub, config) do
       {:ok, token}
     end
   end
@@ -212,10 +223,21 @@ defmodule Bamboo.GmailAdapter do
     end
   end
 
-  defp get_access_token(sub) do
+  defp get_access_token(sub, config) do
+    case token_fetcher(config).(sub) do
+      {:ok, token} -> {:ok, token}
+      {:error, error} -> handle_error(:auth, error)
+    end
+  end
+
+  defp token_fetcher(config) do
+    Map.get(config, :token_fetcher, &fetch_goth_access_token/1)
+  end
+
+  defp fetch_goth_access_token(sub) do
     case Goth.Token.for_scope(@gmail_auth_scope, sub) do
       {:ok, token} -> {:ok, Map.get(token, :token)}
-      {:error, error} -> handle_error(:auth, error)
+      {:error, error} -> {:error, error}
     end
   end
 
@@ -234,6 +256,10 @@ defmodule Bamboo.GmailAdapter do
 
   defp build_request_body(message) do
     "{\"raw\": \"#{message}\"}"
+  end
+
+  defp request_sender(config) do
+    Map.get(config, :request_sender, &HTTPoison.post/3)
   end
 
   defp log_to_sandbox(entity, label: label) do
