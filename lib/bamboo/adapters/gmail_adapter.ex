@@ -162,6 +162,7 @@ defmodule Bamboo.GmailAdapter do
       Mail.Message.build_attachment({filename, data})
       |> maybe_put_attachment_content_type(content_type)
       |> maybe_put_attachment_content_id(content_id)
+      |> maybe_put_inline_content_disposition(content_id)
       |> Mail.Message.put_header(:content_length, byte_size(data))
 
     Mail.Message.put_part(message, attachment)
@@ -181,6 +182,17 @@ defmodule Bamboo.GmailAdapter do
 
   defp maybe_put_attachment_content_id(message, content_id) do
     Mail.Message.put_header(message, :content_id, normalize_content_id(content_id))
+  end
+
+  defp maybe_put_inline_content_disposition(message, nil), do: message
+
+  defp maybe_put_inline_content_disposition(message, _content_id) do
+    content_disposition =
+      message
+      |> Mail.Message.get_header(:content_disposition)
+      |> List.replace_at(0, "inline")
+
+    Mail.Message.put_header(message, :content_disposition, content_disposition)
   end
 
   defp normalize_content_id(content_id) do

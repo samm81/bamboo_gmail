@@ -141,6 +141,34 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert attachment_headers =~ "Content-Disposition: attachment; filename=notes.txt"
   end
 
+  test "keeps inline cid attachments inside multipart related and regular attachments outside it" do
+    rendered =
+      Mail.build_multipart()
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> Mail.put_html(~s(<img src="cid:logo-123" alt="logo" />))
+      |> Mail.Message.put_part(inline_attachment_part())
+      |> Mail.put_attachment({"notes.txt", "attachment body"})
+      |> RFC2822.render()
+
+    outer_boundary = boundary_for(rendered, "multipart/mixed")
+
+    [_, related_part, attachment_part] =
+      String.split(rendered, "--#{outer_boundary}\r\n", parts: 3)
+
+    assert related_part =~ "Content-Type: multipart/related"
+    assert related_part =~ "Content-Disposition: inline; filename=logo.png"
+    refute related_part =~ "Content-Disposition: attachment; filename=notes.txt"
+
+    attachment_headers =
+      attachment_part
+      |> String.split("\r\n\r\n", parts: 2)
+      |> hd()
+
+    assert attachment_headers =~ "Content-Disposition: attachment; filename=notes.txt"
+  end
+
   test "adds utf-8 charset to non-ascii text bodies" do
     rendered =
       %Mail.Message{}
@@ -214,5 +242,12 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     regex = ~r/Content-Type: #{Regex.escape(content_type)}; boundary="([^"]+)"/
     [_, boundary] = Regex.run(regex, rendered)
     boundary
+  end
+
+  defp inline_attachment_part do
+    Mail.Message.build_attachment({"logo.png", "data"})
+    |> Mail.Message.put_content_type("image/webp")
+    |> Mail.Message.put_header(:content_id, "<logo-123>")
+    |> Mail.Message.put_header(:content_disposition, ["inline", {"filename", "logo.png"}])
   end
 end

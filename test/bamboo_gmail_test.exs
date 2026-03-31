@@ -212,7 +212,10 @@ defmodule Bamboo.GmailAdapterTest do
 
     assert output =~ "Content-Type: image/webp"
     assert output =~ "Content-Id: <logo-123>"
+    assert output =~ "Content-Type: multipart/related;"
+    assert output =~ "Content-Disposition: inline; filename=logo.png"
     refute output =~ "Content-Type: application/octet-stream"
+    refute output =~ "Content-Disposition: attachment; filename=logo.png"
   end
 
   test "sandbox rendering preserves already bracketed attachment content ids" do

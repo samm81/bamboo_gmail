@@ -448,29 +448,43 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp reorganize(%Mail.Message{multipart: true} = message) do
     content_type = Mail.Message.get_content_type(message)
 
-    if Mail.Message.has_attachment?(message) do
-      text_parts =
-        Enum.filter(message.parts, &alternative_body_part?/1)
-        |> Enum.sort(&(&1 > &2))
+    text_parts =
+      Enum.filter(message.parts, &alternative_body_part?/1)
+      |> Enum.sort(&(&1 > &2))
 
-      content_type = List.replace_at(content_type, 0, "multipart/mixed")
-      message = Mail.Message.put_content_type(message, content_type)
+    inline_parts = Enum.filter(message.parts, &inline_attachment_part?/1)
+    attachment_parts = Enum.filter(message.parts, &Mail.Message.is_attachment?/1)
 
-      if Enum.any?(text_parts) do
-        message = Enum.reduce(text_parts, message, &Mail.Message.delete_part(&2, &1))
+    cond do
+      Enum.any?(inline_parts) and Enum.any?(text_parts) and Enum.any?(attachment_parts) ->
+        related_part =
+          build_multipart_part("multipart/related", [
+            build_alternative_part(text_parts) | inline_parts
+          ])
 
-        mixed_part =
-          Mail.build_multipart()
-          |> Mail.Message.put_content_type("multipart/alternative")
-
-        mixed_part = Enum.reduce(text_parts, mixed_part, &Mail.Message.put_part(&2, &1))
-        put_in(message.parts, List.insert_at(message.parts, 0, mixed_part))
-      else
         message
-      end
-    else
-      content_type = List.replace_at(content_type, 0, "multipart/alternative")
-      Mail.Message.put_content_type(message, content_type)
+        |> Mail.Message.put_content_type(List.replace_at(content_type, 0, "multipart/mixed"))
+        |> put_in([Access.key(:parts)], [related_part | attachment_parts])
+
+      Enum.any?(inline_parts) and Enum.any?(text_parts) ->
+        message
+        |> Mail.Message.put_content_type(List.replace_at(content_type, 0, "multipart/related"))
+        |> put_in([Access.key(:parts)], [build_alternative_part(text_parts) | inline_parts])
+
+      Enum.any?(inline_parts) or Enum.any?(attachment_parts) ->
+        parts =
+          case text_parts do
+            [] -> inline_parts ++ attachment_parts
+            _parts -> [build_alternative_part(text_parts) | inline_parts ++ attachment_parts]
+          end
+
+        message
+        |> Mail.Message.put_content_type(List.replace_at(content_type, 0, "multipart/mixed"))
+        |> put_in([Access.key(:parts)], parts)
+
+      true ->
+        content_type = List.replace_at(content_type, 0, "multipart/alternative")
+        Mail.Message.put_content_type(message, content_type)
     end
   end
 
@@ -478,8 +492,24 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     Mail.Encoder.encode(body, Mail.Message.get_header(message, "content-transfer-encoding"))
   end
 
+  defp build_alternative_part(parts) do
+    build_multipart_part("multipart/alternative", parts)
+  end
+
+  defp build_multipart_part(content_type, parts) do
+    multipart =
+      Mail.build_multipart()
+      |> Mail.Message.put_content_type(content_type)
+
+    Enum.reduce(parts, multipart, &Mail.Message.put_part(&2, &1))
+  end
+
   defp alternative_body_part?(part) do
     match_content_type?(part, ~r/text\/(plain|html)/) and not Mail.Message.is_attachment?(part)
+  end
+
+  defp inline_attachment_part?(part) do
+    Mail.Message.has_header?(part, :content_id) and not alternative_body_part?(part)
   end
 
   defp maybe_put_utf8_charset(%Mail.Message{} = message) do
