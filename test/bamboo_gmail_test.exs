@@ -31,12 +31,12 @@ defmodule Bamboo.GmailAdapterTest do
     end)
 
     assert {:error, %ArgumentError{} = error} =
-             GmailAdapter.deliver(email(), %{sub: {:system, env_var}, sandbox: true})
+             GmailAdapter.deliver(email(), %{sub: {:system, env_var}})
 
     assert error.message == "Environment variable '#{env_var}' not found"
   end
 
-  test "sandbox rendering preserves display names from normalized bamboo addresses" do
+  test "sandbox delivery stays local and skips access token lookup" do
     env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
     original_value = System.get_env(env_var)
 
@@ -51,8 +51,22 @@ defmodule Bamboo.GmailAdapterTest do
 
     output =
       capture_io(fn ->
-        assert {:error, %ArgumentError{}} =
-                 GmailAdapter.deliver(named_email(), %{sub: {:system, env_var}, sandbox: true})
+        assert {:ok, encoded_message} =
+                 GmailAdapter.deliver(email(), %{sub: {:system, env_var}, sandbox: true})
+
+        assert is_binary(encoded_message)
+      end)
+
+    refute output =~ "[sandbox] <access token>"
+    assert output =~ "[sandbox] <base64url encoded message>"
+  end
+
+  test "sandbox rendering preserves display names from normalized bamboo addresses" do
+    output =
+      capture_io(fn ->
+        assert {:ok, encoded_message} = GmailAdapter.deliver(named_email(), %{sandbox: true})
+
+        assert is_binary(encoded_message)
       end)
 
     assert output =~ "From: =?UTF-8?Q?"
@@ -66,49 +80,23 @@ defmodule Bamboo.GmailAdapterTest do
   end
 
   test "sandbox rendering adds utf-8 charset for non-ascii text bodies" do
-    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
-    original_value = System.get_env(env_var)
-
-    System.delete_env(env_var)
-
-    on_exit(fn ->
-      case original_value do
-        nil -> System.delete_env(env_var)
-        value -> System.put_env(env_var, value)
-      end
-    end)
-
     output =
       capture_io(fn ->
-        assert {:error, %ArgumentError{}} =
-                 GmailAdapter.deliver(unicode_body_email(), %{
-                   sub: {:system, env_var},
-                   sandbox: true
-                 })
+        assert {:ok, encoded_message} =
+                 GmailAdapter.deliver(unicode_body_email(), %{sandbox: true})
+
+        assert is_binary(encoded_message)
       end)
 
     assert output =~ "Content-Type: text/plain; charset=UTF-8"
   end
 
   test "sandbox delivery skips omitted cc and bcc lists" do
-    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
-    original_value = System.get_env(env_var)
-
-    System.delete_env(env_var)
-
-    on_exit(fn ->
-      case original_value do
-        nil -> System.delete_env(env_var)
-        value -> System.put_env(env_var, value)
-      end
-    end)
-
     output =
       capture_io(fn ->
-        assert {:error, %ArgumentError{} = error} =
-                 GmailAdapter.deliver(default_email(), %{sub: {:system, env_var}, sandbox: true})
+        assert {:ok, encoded_message} = GmailAdapter.deliver(default_email(), %{sandbox: true})
 
-        assert error.message == "Environment variable '#{env_var}' not found"
+        assert is_binary(encoded_message)
       end)
 
     refute output =~ "Cc:"
@@ -117,25 +105,11 @@ defmodule Bamboo.GmailAdapterTest do
   end
 
   test "sandbox rendering encodes non-ascii attachment filenames with rfc2231" do
-    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
-    original_value = System.get_env(env_var)
-
-    System.delete_env(env_var)
-
-    on_exit(fn ->
-      case original_value do
-        nil -> System.delete_env(env_var)
-        value -> System.put_env(env_var, value)
-      end
-    end)
-
     output =
       capture_io(fn ->
-        assert {:error, %ArgumentError{}} =
-                 GmailAdapter.deliver(attachment_email(), %{
-                   sub: {:system, env_var},
-                   sandbox: true
-                 })
+        assert {:ok, encoded_message} = GmailAdapter.deliver(attachment_email(), %{sandbox: true})
+
+        assert is_binary(encoded_message)
       end)
 
     assert output =~
@@ -145,25 +119,12 @@ defmodule Bamboo.GmailAdapterTest do
   end
 
   test "sandbox rendering preserves attachment content type and content id" do
-    env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
-    original_value = System.get_env(env_var)
-
-    System.delete_env(env_var)
-
-    on_exit(fn ->
-      case original_value do
-        nil -> System.delete_env(env_var)
-        value -> System.put_env(env_var, value)
-      end
-    end)
-
     output =
       capture_io(fn ->
-        assert {:error, %ArgumentError{}} =
-                 GmailAdapter.deliver(inline_attachment_email(), %{
-                   sub: {:system, env_var},
-                   sandbox: true
-                 })
+        assert {:ok, encoded_message} =
+                 GmailAdapter.deliver(inline_attachment_email(), %{sandbox: true})
+
+        assert is_binary(encoded_message)
       end)
 
     assert output =~ "Content-Type: image/webp"

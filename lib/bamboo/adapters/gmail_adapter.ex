@@ -67,15 +67,14 @@ defmodule Bamboo.GmailAdapter do
     log_to_sandbox(config, label: "config")
     log_to_sandbox(email, label: "email")
 
-    build_message(email)
-    |> render()
-    |> log_to_sandbox(label: "MIME message")
-    |> Base.url_encode64()
-    |> log_to_sandbox(label: "base64url encoded message")
+    encoded_message =
+      build_message(email)
+      |> render()
+      |> log_to_sandbox(label: "MIME message")
+      |> Base.url_encode64()
+      |> log_to_sandbox(label: "base64url encoded message")
 
-    with {:ok, token} <- fetch_access_token(config) do
-      log_to_sandbox(token, label: "access token")
-    end
+    {:ok, encoded_message}
   end
 
   defp handle_dispatch(email, config) do
