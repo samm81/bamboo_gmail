@@ -1,3 +1,7 @@
+defmodule Bamboo.GmailAdapterTest.SandboxMailer do
+  use Bamboo.Mailer, otp_app: :bamboo_gmail
+end
+
 defmodule Bamboo.GmailAdapterTest do
   use ExUnit.Case
   import ExUnit.CaptureIO
@@ -5,6 +9,7 @@ defmodule Bamboo.GmailAdapterTest do
   alias Bamboo.Email
   alias Bamboo.GmailAdapter
   alias Bamboo.GmailAdapter.Errors.{ConfigError, HTTPError}
+  alias Bamboo.GmailAdapterTest.SandboxMailer
 
   doctest Bamboo.GmailAdapter
 
@@ -83,6 +88,30 @@ defmodule Bamboo.GmailAdapterTest do
       end)
 
     refute output =~ "[sandbox] <access token>"
+    assert output =~ "[sandbox] <base64url encoded message>"
+  end
+
+  test "sandbox mailer config path does not require sub" do
+    original_config = Application.get_env(:bamboo_gmail, SandboxMailer)
+
+    Application.put_env(:bamboo_gmail, SandboxMailer,
+      adapter: GmailAdapter,
+      sandbox: true
+    )
+
+    on_exit(fn ->
+      case original_config do
+        nil -> Application.delete_env(:bamboo_gmail, SandboxMailer)
+        value -> Application.put_env(:bamboo_gmail, SandboxMailer, value)
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert {:ok, delivered_email} = SandboxMailer.deliver_now(default_email())
+        assert delivered_email.subject == "subject"
+      end)
+
     assert output =~ "[sandbox] <base64url encoded message>"
   end
 

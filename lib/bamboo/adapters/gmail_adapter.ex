@@ -198,6 +198,8 @@ defmodule Bamboo.GmailAdapter do
     handle_error(:http, error)
   end
 
+  defp validate_config_fields(config = %{sandbox: true}), do: config
+
   # Right now `sub` is the only required field.
   # TODO: Generalize this function
   defp validate_config_fields(config = %{sub: _}), do: config
