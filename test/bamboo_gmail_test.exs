@@ -62,7 +62,7 @@ defmodule Bamboo.GmailAdapterTest do
     assert output =~ "Ana=C3=AFs"
     assert output =~ "<to@example.com>"
     assert output =~ "Cc: =?UTF-8?Q?"
-    assert output =~ "Bcc: =?UTF-8?Q?"
+    refute output =~ "Bcc:"
   end
 
   test "sandbox rendering adds utf-8 charset for non-ascii text bodies" do

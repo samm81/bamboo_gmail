@@ -9,12 +9,6 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   @moduledoc """
   RFC2822 Parser:  Adapted from [elixir-mail](https://github.com/DockYard/elixir-mail)
 
-  Bcc headers are blacklisted during execution of 
-  `render/1` in the original repository.
-
-  It is unclear why the block on bcc was imposed, 
-  but this module removes the blacklist.
-
   Will attempt to render a valid RFC2822 message
   from a `%Mail.Message{}` data model.
 
@@ -26,6 +20,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
       config :mail, email_regex: custom_regex
   """
 
+  @blacklisted_headers ["bcc"]
   @address_types ["From", "To", "Reply-To", "Cc", "Bcc"]
 
   # https://tools.ietf.org/html/rfc2822#section-3.4.1
@@ -60,7 +55,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     boundary = Mail.Message.get_boundary(message)
     message = Mail.Message.put_boundary(message, boundary)
 
-    headers = render_headers(message.headers)
+    headers = render_headers(message.headers, @blacklisted_headers)
     boundary = "--#{boundary}"
 
     parts =
@@ -73,7 +68,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   def render_part(%Mail.Message{} = message, _fun) do
     message = maybe_put_utf8_charset(message)
     encoded_body = encode(message.body, message)
-    "#{render_headers(message.headers)}\r\n\r\n#{encoded_body}"
+    "#{render_headers(message.headers, @blacklisted_headers)}\r\n\r\n#{encoded_body}"
   end
 
   def render_parts(parts, fun \\ &render_part/1) when is_list(parts),
@@ -328,15 +323,16 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   @doc """
   Will render all headers according to the RFC2882 spec
   """
-  def render_headers(headers)
+  def render_headers(headers, blacklist \\ [])
 
-  def render_headers(map) when is_map(map),
+  def render_headers(map, blacklist) when is_map(map),
     do:
       Map.to_list(map)
-      |> render_headers()
+      |> render_headers(blacklist)
 
-  def render_headers(list) when is_list(list) do
-    do_render_headers(list)
+  def render_headers(list, blacklist) when is_list(list) do
+    Enum.reject(list, &Enum.member?(blacklist, elem(&1, 0)))
+    |> do_render_headers()
     |> Enum.reverse()
     |> Enum.join("\r\n")
   end

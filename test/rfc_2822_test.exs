@@ -50,6 +50,20 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header =~ "<jose@example.com>"
   end
 
+  test "render omits bcc headers from the final message" do
+    rendered =
+      %Mail.Message{}
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_bcc({"Hidden Recipient", "bcc@example.com"})
+      |> Mail.put_subject("subject")
+      |> Mail.put_text("body")
+      |> RFC2822.render()
+
+    assert header_line(rendered, "To") == "To: to@example.com"
+    assert header_line(rendered, "Bcc") == nil
+  end
+
   test "quotes ascii attachment filenames with special characters" do
     header =
       RFC2822.render_header("content-disposition", [
