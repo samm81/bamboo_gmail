@@ -44,7 +44,7 @@ defmodule Bamboo.GmailAdapter.Errors do
       #{inspect(message)}
       """
 
-      %TokenError{message: message}
+      %HTTPError{message: message}
     end
 
     def build_error(fields) do

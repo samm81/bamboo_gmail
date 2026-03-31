@@ -13,4 +13,13 @@ defmodule Bamboo.GmailAdapter.ErrorsTest do
     exception = %HTTPError{message: "test"}
     assert is_binary(String.Chars.to_string(exception))
   end
+
+  test "http errors build HTTPError exceptions" do
+    exception = HTTPError.build_error(message: :timeout)
+
+    assert %HTTPError{} = exception
+    refute match?(%TokenError{}, exception)
+    assert exception.message =~ "Error making HTTP request"
+    assert exception.message =~ "timeout"
+  end
 end
