@@ -180,7 +180,21 @@ defmodule Bamboo.GmailAdapter do
   defp maybe_put_attachment_content_id(message, nil), do: message
 
   defp maybe_put_attachment_content_id(message, content_id) do
-    Mail.Message.put_header(message, :content_id, content_id)
+    Mail.Message.put_header(message, :content_id, normalize_content_id(content_id))
+  end
+
+  defp normalize_content_id(content_id) do
+    content_id = to_string(content_id)
+
+    if content_id_message_id_form?(content_id) do
+      content_id
+    else
+      "<#{content_id}>"
+    end
+  end
+
+  defp content_id_message_id_form?(content_id) do
+    String.starts_with?(content_id, "<") and String.ends_with?(content_id, ">")
   end
 
   defp build_request(token, message, config) do

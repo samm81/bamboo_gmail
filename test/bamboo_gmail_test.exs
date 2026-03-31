@@ -201,7 +201,7 @@ defmodule Bamboo.GmailAdapterTest do
     refute output =~ "filename=résumé final.pdf"
   end
 
-  test "sandbox rendering preserves attachment content type and content id" do
+  test "sandbox rendering preserves attachment content type and normalizes bare content ids" do
     output =
       capture_io(fn ->
         assert {:ok, encoded_message} =
@@ -211,8 +211,20 @@ defmodule Bamboo.GmailAdapterTest do
       end)
 
     assert output =~ "Content-Type: image/webp"
-    assert output =~ "Content-Id: logo-123"
+    assert output =~ "Content-Id: <logo-123>"
     refute output =~ "Content-Type: application/octet-stream"
+  end
+
+  test "sandbox rendering preserves already bracketed attachment content ids" do
+    output =
+      capture_io(fn ->
+        assert {:ok, encoded_message} =
+                 GmailAdapter.deliver(inline_attachment_email("<logo-123>"), %{sandbox: true})
+
+        assert is_binary(encoded_message)
+      end)
+
+    assert output =~ "Content-Id: <logo-123>"
   end
 
   defp email do
@@ -275,7 +287,7 @@ defmodule Bamboo.GmailAdapterTest do
     |> Email.put_attachment(%Bamboo.Attachment{filename: "résumé final.pdf", data: "data"})
   end
 
-  defp inline_attachment_email do
+  defp inline_attachment_email(content_id \\ "logo-123") do
     Email.new_email(
       to: [{"Recipient", "to@example.com"}],
       cc: [],
@@ -288,7 +300,7 @@ defmodule Bamboo.GmailAdapterTest do
       filename: "logo.png",
       data: "data",
       content_type: "image/webp",
-      content_id: "logo-123"
+      content_id: content_id
     })
   end
 end
