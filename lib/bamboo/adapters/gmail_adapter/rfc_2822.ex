@@ -153,7 +153,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   end
 
   defp render_address({name, email}) do
-    "#{encode_header_value(~s("#{name}"), :quoted_printable)} <#{validate_address(email)}>"
+    "#{encode_header_value(quote_display_name(name), :quoted_printable)} <#{validate_address(email)}>"
   end
 
   defp render_address(email), do: validate_address(email)
@@ -170,6 +170,16 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     key = String.replace(key, "_", "-")
 
     [render_subtype(key, value) | render_subtypes(subtypes)]
+  end
+
+  defp quote_display_name(name) do
+    escaped_name =
+      name
+      |> to_string()
+      |> String.replace("\\", "\\\\")
+      |> String.replace("\"", "\\\"")
+
+    ~s("#{escaped_name}")
   end
 
   defp render_subtype(key, value) do

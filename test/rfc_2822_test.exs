@@ -50,6 +50,12 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header =~ "<jose@example.com>"
   end
 
+  test "escapes quoted and backslashed display names in address headers" do
+    header = RFC2822.render_header("to", {"A \\ \"Quoted\" User", "to@example.com"})
+
+    assert header == ~S(To: "A \\ \"Quoted\" User" <to@example.com>)
+  end
+
   test "rejects header injection in bare address headers" do
     assert_raise ArgumentError, ~r/is invalid/, fn ->
       RFC2822.render_header("to", "victim@example.com\r\nBcc: injected@example.com")
