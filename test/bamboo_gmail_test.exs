@@ -34,6 +34,12 @@ defmodule Bamboo.GmailAdapterTest do
     end
   end
 
+  test "missing sub returns ConfigError through direct adapter delivery" do
+    assert {:error, %ConfigError{} = error} = GmailAdapter.deliver(default_email(), %{})
+
+    assert error.message =~ "Must provide `sub` field in config"
+  end
+
   test "missing env-backed sub returns an ArgumentError tuple" do
     env_var = "BAMBOO_GMAIL_TEST_MISSING_SUB"
     original_value = System.get_env(env_var)

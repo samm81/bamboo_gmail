@@ -54,7 +54,10 @@ defmodule Bamboo.GmailAdapter do
   @behaviour Bamboo.Adapter
 
   def deliver(email, config) do
-    handle_dispatch(email, config)
+    case validate_config_fields(config) do
+      {:error, %ConfigError{} = error} -> {:error, error}
+      valid_config -> handle_dispatch(email, valid_config)
+    end
   end
 
   def handle_config(config) do
