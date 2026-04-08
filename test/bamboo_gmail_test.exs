@@ -186,6 +186,20 @@ defmodule Bamboo.GmailAdapterTest do
     assert output =~ "Content-Type: text/plain; charset=UTF-8"
   end
 
+  test "sandbox rendering keeps subject-only emails out of empty multipart mode" do
+    capture_io(fn ->
+      assert {:ok, encoded_message} = GmailAdapter.deliver(subject_only_email(), %{sandbox: true})
+
+      rendered_message = Base.url_decode64!(encoded_message)
+
+      assert rendered_message =~ ~s(To: "Recipient" <to@example.com>)
+      assert rendered_message =~ "Subject: subject"
+      refute rendered_message =~ "Content-Type: multipart/alternative"
+      refute rendered_message =~ "Mime-Version: 1.0"
+      refute rendered_message =~ ~r/--[A-F0-9]{24}/
+    end)
+  end
+
   test "sandbox delivery skips omitted cc and bcc lists" do
     output =
       capture_io(fn ->
@@ -281,6 +295,14 @@ defmodule Bamboo.GmailAdapterTest do
       from: {"Sender", "from@example.com"},
       subject: "subject",
       text_body: "café body"
+    )
+  end
+
+  defp subject_only_email do
+    Email.new_email(
+      to: [{"Recipient", "to@example.com"}],
+      from: {"Sender", "from@example.com"},
+      subject: "subject"
     )
   end
 

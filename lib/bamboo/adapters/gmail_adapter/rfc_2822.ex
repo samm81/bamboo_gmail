@@ -529,8 +529,14 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
         |> put_in([Access.key(:parts)], parts)
 
       true ->
-        content_type = List.replace_at(content_type, 0, "multipart/alternative")
-        Mail.Message.put_content_type(message, content_type)
+        case text_parts do
+          [] ->
+            collapse_empty_multipart(message)
+
+          _parts ->
+            content_type = List.replace_at(content_type, 0, "multipart/alternative")
+            Mail.Message.put_content_type(message, content_type)
+        end
     end
   end
 
@@ -548,6 +554,11 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
       |> Mail.Message.put_content_type(content_type)
 
     Enum.reduce(parts, multipart, &Mail.Message.put_part(&2, &1))
+  end
+
+  defp collapse_empty_multipart(%Mail.Message{} = message) do
+    message = Mail.Message.delete_header(message, :content_type)
+    %{message | multipart: false, parts: []}
   end
 
   defp alternative_body_part?(part) do

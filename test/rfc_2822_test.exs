@@ -112,6 +112,22 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     assert header_line(rendered, "Bcc") == nil
   end
 
+  test "render collapses empty multipart messages into header-only output" do
+    rendered =
+      Mail.build_multipart()
+      |> Mail.put_from("from@example.com")
+      |> Mail.put_to("to@example.com")
+      |> Mail.put_subject("subject")
+      |> RFC2822.render()
+
+    assert header_line(rendered, "To") == "To: to@example.com"
+    assert header_line(rendered, "Subject") == "Subject: subject"
+    assert header_line(rendered, "Mime-Version") == "Mime-Version: 1.0"
+    refute rendered =~ "Content-Type: multipart/alternative"
+    refute rendered =~ ~r/--[A-F0-9]{24}/
+    assert String.ends_with?(rendered, "\r\n\r\n")
+  end
+
   test "quotes ascii attachment filenames with special characters" do
     header =
       RFC2822.render_header("content-disposition", [

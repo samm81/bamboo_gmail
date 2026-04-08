@@ -92,7 +92,7 @@ defmodule Bamboo.GmailAdapter do
   end
 
   defp build_message(email) do
-    Mail.build_multipart()
+    build_base_message(email)
     |> put_to(email)
     |> put_cc(email)
     |> put_bcc(email)
@@ -103,6 +103,10 @@ defmodule Bamboo.GmailAdapter do
     |> put_html_body(email)
     |> put_attachments(email)
   end
+
+  defp build_base_message(%{text_body: nil, html_body: nil, attachments: []}), do: Mail.build()
+  defp build_base_message(%{text_body: nil, html_body: nil, attachments: nil}), do: Mail.build()
+  defp build_base_message(_email), do: Mail.build_multipart()
 
   defp put_to(message, %{to: recipients}) do
     Mail.put_to(message, recipients)
