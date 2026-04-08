@@ -53,7 +53,11 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   def render_part(message, render_part_function \\ &render_part/1)
 
   def render_part(%Mail.Message{multipart: true} = message, fun) do
-    boundary = Mail.Message.get_boundary(message)
+    boundary =
+      message
+      |> Mail.Message.get_boundary()
+      |> validate_boundary!()
+
     message = Mail.Message.put_boundary(message, boundary)
 
     headers = render_headers(message.headers, @blacklisted_headers)
@@ -149,6 +153,23 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp do_valid_header_name?(<<?:, _rest::binary>>), do: false
   defp do_valid_header_name?(<<_byte, rest::binary>>), do: do_valid_header_name?(rest)
 
+  defp validate_boundary!(boundary) do
+    boundary = to_string(boundary)
+
+    if valid_boundary?(boundary) do
+      boundary
+    else
+      raise ArgumentError,
+        message: """
+        The boundary value `#{boundary}` is invalid.
+        """
+    end
+  end
+
+  defp valid_boundary?(boundary) do
+    not contains_control_char?(boundary)
+  end
+
   defp validate_address(address) do
     case valid_address?(address) do
       true ->
@@ -188,6 +209,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     do: render_subtypes([{Atom.to_string(key), value} | subtypes])
 
   defp render_subtypes([{"boundary", value} | subtypes]) do
+    value = validate_boundary!(value)
     [~s(boundary=#{quote_parameter_value(value)}) | render_subtypes(subtypes)]
   end
 

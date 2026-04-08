@@ -84,6 +84,20 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     end
   end
 
+  test "rejects multipart boundary injection in rendered messages" do
+    assert_raise ArgumentError,
+                 ~r/boundary value `safe\r\nBcc: injected@example.com` is invalid/,
+                 fn ->
+                   Mail.build_multipart()
+                   |> Mail.put_from("from@example.com")
+                   |> Mail.put_to("to@example.com")
+                   |> Mail.put_subject("subject")
+                   |> Mail.put_text("body")
+                   |> Mail.Message.put_boundary("safe\r\nBcc: injected@example.com")
+                   |> RFC2822.render()
+                 end
+  end
+
   test "render omits bcc headers from the final message" do
     rendered =
       %Mail.Message{}
