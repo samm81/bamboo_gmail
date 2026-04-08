@@ -84,6 +84,8 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     do: render_header(Atom.to_string(key), value)
 
   def render_header(key, value) do
+    key = validate_header_name!(key)
+
     key =
       key
       |> String.replace("_", "-")
@@ -124,6 +126,28 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
 
   defp render_header_value(key, value),
     do: render_header_value(key, List.wrap(value))
+
+  defp validate_header_name!(header_name) do
+    if valid_header_name?(header_name) do
+      header_name
+    else
+      raise ArgumentError,
+        message: """
+        The header name `#{header_name}` is invalid.
+        """
+    end
+  end
+
+  defp valid_header_name?(<<>>), do: false
+
+  defp valid_header_name?(header_name) do
+    do_valid_header_name?(header_name)
+  end
+
+  defp do_valid_header_name?(<<>>), do: true
+  defp do_valid_header_name?(<<byte, _rest::binary>>) when byte <= 32 or byte >= 127, do: false
+  defp do_valid_header_name?(<<?:, _rest::binary>>), do: false
+  defp do_valid_header_name?(<<_byte, rest::binary>>), do: do_valid_header_name?(rest)
 
   defp validate_address(address) do
     case valid_address?(address) do

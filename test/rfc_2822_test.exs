@@ -78,6 +78,12 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     end
   end
 
+  test "rejects header injection in custom header names" do
+    assert_raise ArgumentError, ~r/header name `X-Test\r\nBcc` is invalid/, fn ->
+      RFC2822.render_header("X-Test\r\nBcc", "trace-123")
+    end
+  end
+
   test "render omits bcc headers from the final message" do
     rendered =
       %Mail.Message{}

@@ -168,6 +168,12 @@ defmodule Bamboo.GmailAdapterTest do
     assert rendered_message =~ "X-Trace-Id: trace-123"
   end
 
+  test "sandbox rendering rejects injected custom header names" do
+    assert_raise ArgumentError, ~r/header name `x-test\r\nbcc` is invalid/, fn ->
+      GmailAdapter.deliver(injected_header_email(), %{sandbox: true})
+    end
+  end
+
   test "sandbox rendering adds utf-8 charset for non-ascii text bodies" do
     output =
       capture_io(fn ->
@@ -282,6 +288,11 @@ defmodule Bamboo.GmailAdapterTest do
     default_email()
     |> Email.put_header("Reply-To", {"Reply Sender", "reply@example.com"})
     |> Email.put_header("X-Trace-Id", "trace-123")
+  end
+
+  defp injected_header_email do
+    default_email()
+    |> Email.put_header("X-Test\r\nBcc", "injected@example.com")
   end
 
   defp attachment_email do
