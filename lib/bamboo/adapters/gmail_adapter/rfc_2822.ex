@@ -343,17 +343,15 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   end
 
   defp render_header_line(key, value) do
-    if fold_encoded_header?(key, value) do
+    if fold_header?(key, value) do
       fold_header_line(key, value)
     else
       "#{key}: #{value}"
     end
   end
 
-  defp fold_encoded_header?(key, value) do
-    String.contains?(value, "=?") and
-      byte_size(key) + 2 + byte_size(value) > @header_line_max_length
-  end
+  defp fold_header?(key, value),
+    do: byte_size(key) + 2 + byte_size(value) > @header_line_max_length
 
   defp fold_header_line(key, value) do
     {lines, current_line, _current_length} =

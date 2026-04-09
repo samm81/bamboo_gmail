@@ -38,7 +38,7 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
   end
 
   test "ascii subject headers remain plain" do
-    subject = "Has GCSE Chemistry (AQA) - Atomic Structure & the Periodic Table (Topic 1)"
+    subject = "Has GCSE Chemistry (AQA) - Atomic Structure"
 
     rendered =
       %Mail.Message{}
@@ -49,6 +49,17 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
       |> RFC2822.render()
 
     assert header_line(rendered, "Subject") == "Subject: #{subject}"
+  end
+
+  test "folds long ascii subject headers onto continuation lines" do
+    subject = "Has GCSE Chemistry (AQA) - Atomic Structure & the Periodic Table (Topic 1)"
+    header = RFC2822.render_header("subject", subject)
+    lines = String.split(header, "\r\n")
+
+    assert length(lines) > 1
+    assert Enum.drop(lines, 1) |> Enum.all?(&String.starts_with?(&1, " "))
+    assert Enum.all?(lines, &(byte_size(&1) <= 78))
+    assert String.replace(header, "\r\n", "") == "Subject: #{subject}"
   end
 
   test "encodes non-ascii display names in address headers" do
@@ -159,6 +170,25 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
 
     assert header ==
              ~s|Content-Disposition: attachment; filename="quarterly report (final).pdf"|
+  end
+
+  test "folds long ascii content-disposition headers onto continuation lines" do
+    filename = String.duplicate("report", 9) <> ".txt"
+
+    header =
+      RFC2822.render_header("content-disposition", [
+        "attachment",
+        {"filename", filename}
+      ])
+
+    lines = String.split(header, "\r\n")
+
+    assert length(lines) > 1
+    assert Enum.drop(lines, 1) |> Enum.all?(&String.starts_with?(&1, " "))
+    assert Enum.all?(lines, &(byte_size(&1) <= 78))
+
+    assert String.replace(header, "\r\n", "") ==
+             "Content-Disposition: attachment; filename=#{filename}"
   end
 
   test "encodes non-ascii attachment filenames with rfc2231 parameters" do
