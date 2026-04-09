@@ -84,6 +84,28 @@ defmodule Bamboo.GmailAdapter.RFC2822Test do
     end
   end
 
+  test "rejects header injection in header parameter names" do
+    assert_raise ArgumentError,
+                 ~r/header parameter name `foo\r\nBcc: injected@example.com\r\nX-Foo` is invalid/,
+                 fn ->
+                   RFC2822.render_header("content-disposition", [
+                     "attachment",
+                     {"foo\r\nBcc: injected@example.com\r\nX-Foo", "bar"}
+                   ])
+                 end
+  end
+
+  test "rejects injected parameter names while rendering message parts" do
+    assert_raise ArgumentError, ~r/header parameter name `filename\r\nBcc` is invalid/, fn ->
+      Mail.Message.build_attachment({"notes.txt", "attachment body"})
+      |> Mail.Message.put_header(:content_disposition, [
+        "attachment",
+        {"filename\r\nBcc", "notes.txt"}
+      ])
+      |> RFC2822.render_part()
+    end
+  end
+
   test "rejects multipart boundary injection in rendered messages" do
     assert_raise ArgumentError,
                  ~r/boundary value `safe\r\nBcc: injected@example.com` is invalid/,

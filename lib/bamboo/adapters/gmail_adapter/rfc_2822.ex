@@ -153,6 +153,17 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp do_valid_header_name?(<<?:, _rest::binary>>), do: false
   defp do_valid_header_name?(<<_byte, rest::binary>>), do: do_valid_header_name?(rest)
 
+  defp validate_parameter_name!(parameter_name) do
+    if parameter_token_safe?(parameter_name) do
+      parameter_name
+    else
+      raise ArgumentError,
+        message: """
+        The header parameter name `#{parameter_name}` is invalid.
+        """
+    end
+  end
+
   defp validate_boundary!(boundary) do
     boundary = to_string(boundary)
 
@@ -214,7 +225,10 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   end
 
   defp render_subtypes([{key, value} | subtypes]) do
-    key = String.replace(key, "_", "-")
+    key =
+      key
+      |> String.replace("_", "-")
+      |> validate_parameter_name!()
 
     [render_subtype(key, value) | render_subtypes(subtypes)]
   end
