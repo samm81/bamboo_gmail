@@ -31,7 +31,7 @@ defmodule BambooGmail.MixProject do
       {:goth, "~> 1.2.0"},
       {:httpoison, "~> 1.6"},
       {:mail, "~> 0.2"},
-      {:ex_doc, "~> 0.21", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40", only: [:dev, :test], runtime: false}
     ]
   end
 
