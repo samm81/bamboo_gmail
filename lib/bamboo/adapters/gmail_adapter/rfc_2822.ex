@@ -230,7 +230,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
       |> String.replace("_", "-")
       |> validate_parameter_name!()
 
-    [render_subtype(key, value) | render_subtypes(subtypes)]
+    List.wrap(render_subtype(key, value)) ++ render_subtypes(subtypes)
   end
 
   defp quote_display_name(name) do
@@ -245,8 +245,17 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
 
   defp render_subtype(key, value) do
     case encode_parameter_value(value) do
-      {:regular, encoded_value} -> "#{key}=#{encoded_value}"
-      {:extended, encoded_value} -> "#{key}*=#{encoded_value}"
+      {:regular, encoded_value} ->
+        "#{key}=#{encoded_value}"
+
+      {:extended, encoded_value} ->
+        "#{key}*=#{encoded_value}"
+
+      {:continuation, encoded_values} ->
+        render_parameter_continuations(key, encoded_values)
+
+      {:extended_continuation, encoded_values} ->
+        render_parameter_continuations(key, encoded_values, true)
     end
   end
 
@@ -254,14 +263,47 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
     value = to_string(value)
 
     cond do
+      byte_size(value) > @encoded_word_max_length and parameter_token_safe?(value) ->
+        {:continuation, split_parameter_value(value, @encoded_word_max_length)}
+
       parameter_token_safe?(value) ->
         {:regular, value}
 
       requires_extended_parameter_encoding?(value) ->
-        {:extended, "UTF-8''" <> encode_extended_parameter_value(value)}
+        encode_extended_parameter(value)
 
       true ->
-        {:regular, quote_parameter_value(value)}
+        quote_or_continue_parameter(value)
+    end
+  end
+
+  defp render_parameter_continuations(key, encoded_values, extended \\ false) do
+    encoded_values
+    |> Enum.with_index()
+    |> Enum.map(fn {encoded_value, index} ->
+      suffix = if extended, do: "*#{index}*", else: "*#{index}"
+      "#{key}#{suffix}=#{encoded_value}"
+    end)
+  end
+
+  defp encode_extended_parameter(value) do
+    encoded_value = "UTF-8''" <> encode_extended_parameter_value(value)
+
+    if byte_size(encoded_value) > @encoded_word_max_length do
+      {:extended_continuation,
+       split_extended_parameter_value(encoded_value, @encoded_word_max_length)}
+    else
+      {:extended, encoded_value}
+    end
+  end
+
+  defp quote_or_continue_parameter(value) do
+    quoted_value = quote_parameter_value(value)
+
+    if byte_size(quoted_value) > @encoded_word_max_length do
+      encode_extended_parameter(value)
+    else
+      {:regular, quoted_value}
     end
   end
 
@@ -318,7 +360,7 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp extended_parameter_char?(_char), do: false
 
   defp encode_header_value(header_value, :quoted_printable) when is_binary(header_value) do
-    if requires_encoding?(header_value) do
+    if requires_encoding?(header_value) or requires_encoded_word_folding?(header_value) do
       header_value
       |> encode_quoted_printable_header(@encoded_word_max_length)
       |> wrap_encoded_words()
@@ -381,6 +423,66 @@ defmodule Bamboo.GmailAdapter.RFC2822 do
   defp header_segments(value) do
     Regex.scan(~r/(\s+)(\S+)/u, " " <> value, capture: :all_but_first)
     |> Enum.map(fn [separator, token] -> {separator, token} end)
+  end
+
+  defp requires_encoded_word_folding?(value) do
+    value
+    |> String.split(~r/\s+/u, trim: true)
+    |> Enum.any?(&(byte_size(&1) > @encoded_word_max_length))
+  end
+
+  defp split_parameter_value(value, max_length) do
+    do_split_parameter_units(parameter_units(value), max_length)
+  end
+
+  defp split_extended_parameter_value(<<"UTF-8''", rest::binary>>, max_length) do
+    available_length = max_length - byte_size("UTF-8''")
+
+    case do_split_parameter_units(parameter_units(rest), available_length) do
+      [] -> ["UTF-8''"]
+      [first | remaining] -> ["UTF-8''" <> first | remaining]
+    end
+  end
+
+  defp parameter_units(value) do
+    Regex.scan(~r/%[0-9A-F]{2}|./u, value)
+    |> Enum.map(&hd/1)
+  end
+
+  defp do_split_parameter_units(units, max_length),
+    do: do_split_parameter_units(units, max_length, [], [], 0)
+
+  defp do_split_parameter_units([], _max_length, [], acc, _current_length),
+    do: Enum.reverse(acc)
+
+  defp do_split_parameter_units([], _max_length, current, acc, _current_length),
+    do: Enum.reverse([Enum.reverse(current) |> Enum.join() | acc])
+
+  defp do_split_parameter_units([unit | rest], max_length, current, acc, current_length) do
+    unit_length = byte_size(unit)
+
+    cond do
+      current == [] and unit_length > max_length ->
+        do_split_parameter_units(rest, max_length, [], [unit | acc], 0)
+
+      current_length + unit_length <= max_length ->
+        do_split_parameter_units(
+          rest,
+          max_length,
+          [unit | current],
+          acc,
+          current_length + unit_length
+        )
+
+      true ->
+        do_split_parameter_units(
+          [unit | rest],
+          max_length,
+          [],
+          [Enum.reverse(current) |> Enum.join() | acc],
+          0
+        )
+    end
   end
 
   defp encode_quoted_printable_header(string, max_length, acc \\ <<>>, line_length \\ 0)
